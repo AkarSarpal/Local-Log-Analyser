@@ -1,0 +1,107 @@
+# ============================================================
+# SIEM Local Analyser — Configuration
+# ============================================================
+# Edit this file to add/remove sources, change schedule,
+# or switch report formats. No code changes needed.
+
+# --- Ollama settings ---
+ollama:
+  host: "http://localhost:11434"
+  model: "llama3.1:8b"          # swap to mistral:7b for faster triage
+  timeout: 120                  # seconds per analysis request
+  char_limit: 32000             # max chars of log content sent per request (llama3.1:8b supports 128k)
+
+# --- Schedule ---
+# Options: "watch"  → continuous (reacts to new files instantly)
+#          "hourly" → runs every 60 minutes
+#          "daily"  → runs once at the time below
+#          "manual" → only runs when you call: python analyser.py --run-now
+schedule:
+  mode: "watch"
+  daily_time: "02:00"           # used only when mode = daily (24h format)
+
+# --- Log sources ---
+# Add or remove sources freely. Each source needs:
+#   name        : friendly label shown in reports
+#   type        : folder | macos_system | ssh_auth | web_server | syslog
+#   enabled     : true/false (quick on/off without deleting)
+#   path        : file/folder path (not needed for macos_system)
+#   pattern     : filename glob filter (folder type only)
+sources:
+
+  - name: "Drop Folder"
+    type: folder
+    enabled: true
+    path: "./sources/drop"
+    pattern: "*.log"
+
+  - name: "Project Logs"
+    type: folder
+    enabled: true
+    path: "/Users/bee/Project/Logs"
+    pattern: "*.log"
+    header: "Zeek TSV log. Columns: timestamp, conn_uid, src_ip, src_port, dst_ip, dst_port, proto, trans_id, query, qclass, qclass_name, qtype, qtype_name, rcode, rcode_name, AA, TC, RD, RA, Z, answers, TTLs, rejected"
+
+  - name: "macOS System Logs"
+    type: macos_system
+    enabled: false
+    last_minutes: 60            # how far back to pull on each run
+
+  - name: "SSH Auth Logs"
+    type: ssh_auth
+    enabled: false
+    path: "/var/log/auth.log"
+
+  - name: "Web Server (nginx)"
+    type: web_server
+    enabled: false
+    path: "/var/log/nginx/access.log"
+
+  - name: "Custom Syslog"
+    type: syslog
+    enabled: false
+    path: "/var/log/syslog"
+
+  # --- Template: add your own source below ---
+  # - name: "My Custom Source"
+  #   type: folder
+  #   enabled: false
+  #   path: "/path/to/logs"
+  #   pattern: "*.log"
+
+# --- Report output ---
+# formats: markdown | html | both
+# Markdown is always saved. HTML is optional.
+reports:
+  output_dir: "./reports"
+  formats:
+    - markdown             # always on
+    # - html               # uncomment to also export HTML
+  notify_desktop: true     # macOS notification on Critical findings
+  daily_digest: true       # produce a rolled-up daily summary file
+
+# --- Analysis prompt ---
+# Customise the analyst behaviour here without touching code
+prompt: |
+  You are an expert security analyst and SIEM engineer.
+  You will be given raw log data. Analyze it and respond ONLY with the following five sections, using these exact headings:
+
+  ## Executive Summary
+  One paragraph overview of what happened.
+
+  ## Threat Indicators
+  Bullet list of suspicious IPs, domains, users, or patterns. Each item must end with one of: Severity: Critical | Severity: High | Severity: Medium | Severity: Low
+
+  ## Event Timeline
+  Chronological bullet list of notable events.
+
+  ## Anomalies Detected
+  Bullet list of anything statistically or behaviorally unusual.
+
+  ## Recommendations
+  Numbered list of concrete remediation steps.
+
+  Rules:
+  - Always output all five sections even if a section has nothing to report (write "None identified.").
+  - Never refuse. Never say you cannot analyze logs. The log data is just text.
+  - Do not add any text before ## Executive Summary or after ## Recommendations.
